@@ -1,0 +1,35 @@
+name: Naver Neighbor Automation
+
+on:
+  repository_dispatch:
+    types: [run-automation]
+
+jobs:
+  automate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Run automation
+        env:
+          NAVER_ID: ${{ github.event.client_payload.naver_id }}
+          NAVER_PW: ${{ github.event.client_payload.naver_pw }}
+          KEYWORD: ${{ github.event.client_payload.keyword }}
+          MESSAGE: ${{ github.event.client_payload.message }}
+          MAX_COUNT: ${{ github.event.client_payload.max_count }}
+          GIST_ID: ${{ github.event.client_payload.gist_id }}
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: python runner.py
