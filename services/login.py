@@ -1,52 +1,74 @@
-import json
-from playwright.async_api import BrowserContext
+import random
+from playwright.async_api import Page
 
 
-async def naver_login_with_cookies(context: BrowserContext, cookies_json: str, log_callback=None) -> bool:
-    """쿠키를 사용하여 네이버에 로그인한다."""
+async def naver_login(page: Page, user_id: str, user_pw: str, log_callback=None) -> bool:
+    """Playwright로 네이버 로그인을 수행한다."""
 
     async def log(msg: str):
         if log_callback:
             await log_callback(msg)
 
     try:
-        cookies = json.loads(cookies_json)
+        await page.goto("https://nid.naver.com/nidlogin.login")
+        await page.wait_for_timeout(int(random.uniform(1500, 2500)))
 
-        # 쿠키를 Playwright 형식으로 변환
-        pw_cookies = []
-        for cookie in cookies:
-            pw_cookie = {
-                "name": cookie.get("name", ""),
-                "value": cookie.get("value", ""),
-                "domain": cookie.get("domain", ".naver.com"),
-                "path": cookie.get("path", "/"),
-            }
-            if cookie.get("expirationDate"):
-                pw_cookie["expires"] = cookie["expirationDate"]
-            pw_cookies.append(pw_cookie)
+        # 이미 로그인 상태인지 확인
+        if "nid.naver.com" not in page.url:
+            await log("이미 로그인되어 있습니다. 로그인 과정을 건너뜁니다.")
+            return True
 
-        await context.add_cookies(pw_cookies)
-        await log(f"쿠키 {len(pw_cookies)}개를 적용했습니다.")
+        await log("로그인을 시도합니다...")
 
-        # 로그인 확인
-        page = await context.new_page()
-        await page.goto("https://www.naver.com")
-        await page.wait_for_timeout(2000)
-
-        # 로그인 상태 확인 (네이버 메인에서 로그인 버튼 유무)
-        login_btn = page.locator("a.MyView-module__link_login___HpHMW")
-        if await login_btn.count() > 0:
-            await log("쿠키 로그인 실패. 쿠키가 만료되었거나 잘못되었습니다.")
-            await page.close()
+        if not user_pw:
+            await log("비밀번호가 없어 자동 로그인을 할 수 없습니다.")
             return False
 
-        await log("쿠키 로그인 성공!")
-        await page.close()
+        # 클립보드 붙여넣기 방식으로 봇 감지 우회
+        # ID 입력
+        id_input = page.locator("#id")
+        await id_input.click()
+        await page.evaluate(
+            """(id) => {
+                document.querySelector('#id').value = id;
+                document.querySelector('#id').dispatchEvent(new Event('input', {bubbles: true}));
+            }""",
+            user_id,
+        )
+        await page.wait_for_timeout(int(random.uniform(500, 1000)))
+
+        # PW 입력
+        pw_input = page.locator("#pw")
+        await pw_input.click()
+        await page.evaluate(
+            """(pw) => {
+                document.querySelector('#pw').value = pw;
+                document.querySelector('#pw').dispatchEvent(new Event('input', {bubbles: true}));
+            }""",
+            user_pw,
+        )
+        await page.wait_for_timeout(int(random.uniform(500, 1000)))
+
+        # 로그인 버튼 클릭
+        await page.locator("#log\\.login").click()
+
+        await log("로그인 처리 대기 중... (캡차가 발생하면 실패할 수 있습니다)")
+
+        # 로그인 완료 대기 (최대 30초)
+        max_wait = 30
+        waited = 0
+        while "nidlogin.login" in page.url or "step2" in page.url:
+            await page.wait_for_timeout(1000)
+            waited += 1
+            if waited % 10 == 0:
+                await log(f"로그인 완료 대기 중... ({waited}초 경과)")
+            if waited > max_wait:
+                await log("로그인 시간 초과 (30초).")
+                return False
+
+        await log("로그인 성공!")
         return True
 
-    except json.JSONDecodeError:
-        await log("쿠키 형식이 올바르지 않습니다. JSON 형식으로 입력해주세요.")
-        return False
     except Exception as e:
         await log(f"로그인 중 오류 발생: {e}")
         return False

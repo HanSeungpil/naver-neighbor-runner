@@ -11,7 +11,7 @@ import urllib.request
 
 from playwright.async_api import async_playwright
 
-from services.login import naver_login_with_cookies
+from services.login import naver_login
 from services.search import search_blogs
 from services.neighbor import add_neighbor
 
@@ -88,12 +88,13 @@ async def log(msg: str):
 async def main():
     global status, progress
 
-    cookies_json = os.environ.get("COOKIES", "")
+    naver_id = os.environ.get("NAVER_ID", "")
+    naver_pw = os.environ.get("NAVER_PW", "")
     keyword = os.environ.get("KEYWORD", "")
     message = os.environ.get("MESSAGE", "")
     max_count = int(os.environ.get("MAX_COUNT", "100"))
 
-    if not cookies_json or not keyword or not message:
+    if not naver_id or not keyword or not message:
         await log("필수 환경변수가 누락되었습니다.")
         status = "error"
         update_gist()
@@ -116,16 +117,16 @@ async def main():
             viewport={"width": 1280, "height": 800},
         )
 
-        # 1. 쿠키 로그인
-        if not await naver_login_with_cookies(context, cookies_json, log_callback=log):
-            await log("쿠키 로그인 실패.")
+        page = await context.new_page()
+
+        # 1. 로그인
+        if not await naver_login(page, naver_id, naver_pw, log_callback=log):
+            await log("로그인 실패.")
             status = "error"
             update_gist()
             save_result()
             await browser.close()
             return
-
-        page = await context.new_page()
         await log("로그인 확인 완료. 2초 후 검색을 시작합니다...")
         await page.wait_for_timeout(2000)
 

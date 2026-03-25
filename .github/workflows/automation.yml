@@ -25,7 +25,8 @@ jobs:
 
       - name: Run automation
         env:
-          COOKIES: ${{ github.event.client_payload.cookies }}
+          NAVER_ID: ${{ github.event.client_payload.naver_id }}
+          NAVER_PW: ${{ github.event.client_payload.naver_pw }}
           KEYWORD: ${{ github.event.client_payload.keyword }}
           MESSAGE: ${{ github.event.client_payload.message }}
           MAX_COUNT: ${{ github.event.client_payload.max_count }}
