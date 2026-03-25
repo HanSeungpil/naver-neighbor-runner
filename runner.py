@@ -11,7 +11,7 @@ import urllib.request
 
 from playwright.async_api import async_playwright
 
-from services.login import naver_login
+from services.login import naver_login_with_cookies
 from services.search import search_blogs
 from services.neighbor import add_neighbor
 
@@ -57,6 +57,26 @@ def update_gist():
         print(f"Gist 업데이트 실패: {e}")
 
 
+def delete_gist():
+    """작업 완료 후 Gist를 삭제한다."""
+    if not GIST_ID or not GH_TOKEN:
+        return
+
+    req = urllib.request.Request(
+        f"https://api.github.com/gists/{GIST_ID}",
+        method="DELETE",
+        headers={
+            "Authorization": f"Bearer {GH_TOKEN}",
+            "Accept": "application/vnd.github+json",
+        },
+    )
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        print(f"Gist {GIST_ID} 삭제 완료")
+    except Exception as e:
+        print(f"Gist 삭제 실패: {e}")
+
+
 async def log(msg: str):
     print(msg)
     logs.append(msg)
@@ -68,13 +88,12 @@ async def log(msg: str):
 async def main():
     global status, progress
 
-    naver_id = os.environ.get("NAVER_ID", "")
-    naver_pw = os.environ.get("NAVER_PW", "")
+    cookies_json = os.environ.get("COOKIES", "")
     keyword = os.environ.get("KEYWORD", "")
     message = os.environ.get("MESSAGE", "")
     max_count = int(os.environ.get("MAX_COUNT", "100"))
 
-    if not naver_id or not keyword or not message:
+    if not cookies_json or not keyword or not message:
         await log("필수 환경변수가 누락되었습니다.")
         status = "error"
         update_gist()
@@ -96,17 +115,17 @@ async def main():
             ),
             viewport={"width": 1280, "height": 800},
         )
-        page = await context.new_page()
 
-        # 1. 로그인
-        if not await naver_login(page, naver_id, naver_pw, log_callback=log):
-            await log("로그인 실패.")
+        # 1. 쿠키 로그인
+        if not await naver_login_with_cookies(context, cookies_json, log_callback=log):
+            await log("쿠키 로그인 실패.")
             status = "error"
             update_gist()
             save_result()
             await browser.close()
             return
 
+        page = await context.new_page()
         await log("로그인 확인 완료. 2초 후 검색을 시작합니다...")
         await page.wait_for_timeout(2000)
 
@@ -169,6 +188,12 @@ async def main():
     await log(f"\n작업 완료! (성공: {progress['success']}건, 소요: {duration}초)")
     update_gist()
     save_result()
+
+    # 완료 후 60초 대기 (마지막 polling 보장) → Gist 삭제
+    await log("60초 후 상태 데이터가 자동 삭제됩니다.")
+    update_gist()
+    await asyncio.sleep(60)
+    delete_gist()
 
 
 def save_result():
